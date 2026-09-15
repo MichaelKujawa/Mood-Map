@@ -1,15 +1,16 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ScrollView, SafeAreaView, ActivityIndicator,
 } from 'react-native';
-import { spacing, fontSize, radius, Theme } from '../../theme';
+import { Theme } from '../../theme';
 import { useTheme } from '../../theme/ThemeContext'; 
 import { scoreSession, getScoreLabel } from '../../core/scoringEngine';
 import { store } from '../../data/store';
 import { EMOTION_COLORS } from '../EmotionWheel/WheelItem';
 import type { CompletedEmotion } from '../EmotionDetail/EmotionDetailScreen';
 import type { EmotionInput } from '../../core/types';
+import type { DailyAggregate } from '../../data/storageTypes';
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -53,8 +54,8 @@ function computeResult(emotions: CompletedEmotion[]) {
 
   return {
     ...rawResult,
-    dailyScore:    dampened,
-    scoreLabel:    getScoreLabel(dampened),
+    dailyScore:     dampened,
+    scoreLabel:     getScoreLabel(dampened),
     isDifficultDay: dampened <= -8,
   };
 }
@@ -62,18 +63,30 @@ function computeResult(emotions: CompletedEmotion[]) {
 // ── Screen ────────────────────────────────────────────────────────────────────
 
 export default function EntrySummaryScreen({ emotions, onSave, onEdit }: Props) {
-  const [saving, setSaving] = useState(false);
+  const [saving, setSaving]               = useState(false);
+  const [existingToday, setExistingToday] = useState<DailyAggregate | null>(null);
 
-   const { colors } = useTheme();
+   const { colors, spacing, fontSize, radius } = useTheme();
 
     const styles = useMemo(
-        () => createStyles(colors),
-        [colors]
+        () => createStyles(colors, spacing, fontSize, radius),
+        [colors, spacing, fontSize, radius]
     );
 
   const result     = computeResult(emotions);
   const labelColor = scoreColor(result.dailyScore, colors);
   const today      = new Date().toISOString().slice(0, 10);
+
+  // Look up whether today already has entries logged, so the user knows
+  // saving will add to today's average rather than replace anything.
+  useEffect(() => {
+    let cancelled = false;
+    store.getEntry(today).then(r => {
+      if (!cancelled && r.ok) setExistingToday(r.value);
+    });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSave() {
     setSaving(true);
@@ -104,9 +117,25 @@ export default function EntrySummaryScreen({ emotions, onSave, onEdit }: Props) 
           </Text>
         </View>
 
+        {/* Existing entries today notice */}
+        {existingToday && existingToday.sessionCount > 0 && (
+          <View style={styles.existingNotice}>
+            <Text style={styles.existingNoticeText}>
+              You've already logged {existingToday.sessionCount}{' '}
+              {existingToday.sessionCount === 1 ? 'entry' : 'entries'} today
+              {' '}(currently averaging{' '}
+              {existingToday.dailyScore > 0 ? '+' : ''}{existingToday.dailyScore.toFixed(1)}).
+              Saving this will add it as another entry, and today's score
+              will update to the average of all of them.
+            </Text>
+          </View>
+        )}
+
         {/* Score card */}
         <View style={[styles.scoreCard, { borderColor: labelColor }]}>
-          <Text style={styles.scoreCardLabel}>Daily Score</Text>
+          <Text style={styles.scoreCardLabel}>
+            {existingToday && existingToday.sessionCount > 0 ? 'This Entry\'s Score' : 'Daily Score'}
+          </Text>
           <Text style={[styles.scoreNumber, { color: labelColor }]}>
             {result.dailyScore > 0 ? '+' : ''}{result.dailyScore.toFixed(2)}
           </Text>
@@ -210,7 +239,9 @@ export default function EntrySummaryScreen({ emotions, onSave, onEdit }: Props) 
         >
           {saving
             ? <ActivityIndicator color={colors.textDark} />
-            : <Text style={styles.saveButtonText}>Save Entry</Text>
+            : <Text style={styles.saveButtonText}>
+                {existingToday && existingToday.sessionCount > 0 ? 'Add Entry' : 'Save Entry'}
+              </Text>
           }
         </TouchableOpacity>
 
@@ -229,7 +260,7 @@ export default function EntrySummaryScreen({ emotions, onSave, onEdit }: Props) 
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const createStyles = (colors: any) => 
+const createStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   container: {
     flex:            1,
@@ -253,6 +284,20 @@ const createStyles = (colors: any) =>
   headerDate: {
     color:    colors.textMuted,
     fontSize: fontSize.sm,
+  },
+
+  // Existing entries today notice
+  existingNotice: {
+    backgroundColor: 'rgba(107,79,160,0.12)',
+    borderRadius:    radius.md,
+    padding:         spacing.md,
+    borderWidth:     1,
+    borderColor:     'rgba(107,79,160,0.3)',
+  },
+  existingNoticeText: {
+    color:      colors.white,
+    fontSize:   fontSize.sm,
+    lineHeight: 20,
   },
 
   // Score card

@@ -1,13 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // MoodMap — Stats Engine
 //
-// Pure functions that compute MonthlyStats and AllTimeStats from raw
-// PersistedEntry arrays. No AsyncStorage access — these are called by
-// the storage layer after reading entries, and can also be called
-// directly in tests or for on-the-fly recalculation.
+// Pure functions that compute MonthlyStats and AllTimeStats from
+// DailyAggregate arrays (one row per calendar date, already averaged
+// across any multiple sessions logged that day). No AsyncStorage access —
+// these are called by the storage layer after reading entries, and can
+// also be called directly in tests or for on-the-fly recalculation.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { PersistedEntry, MonthlyStats, AllTimeStats } from './storageTypes';
+import type { DailyAggregate, MonthlyStats, AllTimeStats } from './storageTypes';
 
 // ── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -93,15 +94,16 @@ function currentStreak(sortedDates: string[], today: string): number {
 // ── MONTHLY STATS ────────────────────────────────────────────────────────────
 
 /**
- * Computes MonthlyStats for a given calendar month from an array of entries.
- * Caller should pass only entries belonging to that month.
+ * Computes MonthlyStats for a given calendar month from an array of
+ * DailyAggregates (one per date). Caller should pass only aggregates
+ * belonging to that month.
  *
  * @param yearMonth - "YYYY-MM"
- * @param entries   - All entries for this month, any order
+ * @param entries   - All day-aggregates for this month, any order
  */
 export function computeMonthlyStats(
   yearMonth: string,
-  entries: PersistedEntry[],
+  entries: DailyAggregate[],
 ): MonthlyStats {
   if (entries.length === 0) {
     return {
@@ -140,11 +142,11 @@ export function computeMonthlyStats(
 /**
  * Computes AllTimeStats from the complete entry history.
  *
- * @param entries - All entries across all time, any order
+ * @param entries - All day-aggregates across all time, any order
  * @param today   - ISO date "YYYY-MM-DD" for streak calculation (defaults to now)
  */
 export function computeAllTimeStats(
-  entries: PersistedEntry[],
+  entries: DailyAggregate[],
   today?: string,
 ): AllTimeStats {
   const todayStr = today ?? new Date().toISOString().slice(0, 10);
@@ -199,7 +201,7 @@ export function computeAllTimeStats(
  * Returns a sorted list of all "YYYY-MM" months that appear in entries.
  * Used to decide which month caches need refreshing.
  */
-export function getMonthsFromEntries(entries: PersistedEntry[]): string[] {
+export function getMonthsFromEntries(entries: DailyAggregate[]): string[] {
   const months = new Set(entries.map(e => e.date.slice(0, 7)));
   return Array.from(months).sort();
 }

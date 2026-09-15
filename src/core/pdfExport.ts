@@ -7,7 +7,7 @@
 
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import type { PersistedEntry, MonthlyStats } from '../data/storageTypes';
+import type { DailyAggregate, MonthlyStats } from '../data/storageTypes';
 
 // ── Color helpers ─────────────────────────────────────────────────────────────
 
@@ -42,7 +42,7 @@ const EMOTION_COLORS: Record<string, string> = {
 
 // ── SVG mini graph ────────────────────────────────────────────────────────────
 
-function buildGraphSVG(entries: PersistedEntry[]): string {
+function buildGraphSVG(entries: DailyAggregate[]): string {
   if (entries.length < 2) return '';
 
   const W    = 600;
@@ -119,7 +119,7 @@ function buildGraphSVG(entries: PersistedEntry[]): string {
 // ── HTML report builder ───────────────────────────────────────────────────────
 
 function buildHTML(
-  entries:     PersistedEntry[],
+  entries:     DailyAggregate[],
   monthStats:  MonthlyStats[],
   dateRange:   { from: string; to: string },
   includeNotes: boolean,
@@ -171,7 +171,7 @@ function buildHTML(
     </tr>
   `).join('');
 
-  // Individual entry rows
+  // Individual entry (day) rows
   const entryRows = sorted.reverse().map(entry => {
     const d = new Date(entry.date + 'T12:00:00')
       .toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -197,10 +197,13 @@ function buildHTML(
     const scorePrefix = entry.dailyScore > 0 ? '+' : '';
     const scoreVal    = entry.dailyScore.toFixed(2);
     const scoreLabel  = scoreToLabel(entry.dailyScore);
+    const sessionNote = entry.sessionCount > 1
+      ? ' <span style="color:#888;font-size:10px;">(' + entry.sessionCount + ' entries, averaged)</span>'
+      : '';
 
     let rows = '<tr>' +
       '<td style="white-space:nowrap;">' + d + '</td>' +
-      '<td style="color:' + scoreColor + ';font-weight:700;">' + scorePrefix + scoreVal + '</td>' +
+      '<td style="color:' + scoreColor + ';font-weight:700;">' + scorePrefix + scoreVal + sessionNote + '</td>' +
       '<td style="font-size:12px;color:#888;">' + scoreLabel + '</td>' +
       '<td>' + emotionList + '</td>' +
       '<td>' + entry.totalIntensity + '</td>' +
@@ -365,7 +368,7 @@ function buildHTML(
     <div class="meta">
       Period: ${fromDate} — ${toDate} &nbsp;·&nbsp;
       Generated: ${generated} &nbsp;·&nbsp;
-      ${entries.length} entries
+      ${entries.length} days logged
     </div>
   </div>
 
@@ -402,7 +405,7 @@ function buildHTML(
       </div>
       <div class="stat-card">
         <div class="stat-value">${entries.length}</div>
-        <div class="stat-label">Total Entries</div>
+        <div class="stat-label">Total Days Logged</div>
       </div>
     </div>
   </div>
@@ -437,7 +440,7 @@ function buildHTML(
         <tr>
           <th>Month</th>
           <th>Avg Score</th>
-          <th>Entries</th>
+          <th>Days Logged</th>
           <th>Best Day</th>
           <th>Hardest Day</th>
           <th>Top Emotion</th>
@@ -484,7 +487,7 @@ function buildHTML(
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export interface ReportOptions {
-  entries:      PersistedEntry[];
+  entries:      DailyAggregate[];
   monthStats:   MonthlyStats[];
   dateRange:    { from: string; to: string };
   includeNotes: boolean;

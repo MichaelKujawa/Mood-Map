@@ -2,8 +2,8 @@ import React, {useMemo} from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Dimensions,
 } from 'react-native';
-import { spacing, fontSize, radius } from '../../theme';
-import { useTheme } from '../../theme/ThemeContext'; 
+import { useTheme } from '../../theme/ThemeContext';
+import { useResponsive } from '../../theme/responsive';
 import type { CoreEmotion, EmotionTier } from '../../core/types';
 
 export const EMOTION_COLORS: Record<CoreEmotion, string> = {
@@ -82,22 +82,69 @@ export const EMOTION_INFO: Record<CoreEmotion, Record<EmotionTier, EmotionInfo>>
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+// Every label in a given category (tier derivatives, core names) shares one
+// computed font size rather than each auto-shrinking to its own best fit —
+// that per-word shrinking is what made "Joy" render visibly bigger than
+// "Apprehension". Sizing off the single longest possible string in each
+// category guarantees every other, shorter string in that category fits
+// too, at the exact same size.
+const ALL_TIER_NAMES = Object.values(DERIVATIVE_NAMES).flatMap(d => [d.mild, d.intense]);
+const LONGEST_TIER_NAME = ALL_TIER_NAMES.reduce((a, b) => (b.length > a.length ? b : a));
+
+const ALL_CORE_NAMES = Object.keys(DERIVATIVE_NAMES);
+const LONGEST_CORE_NAME = ALL_CORE_NAMES.reduce((a, b) => (b.length > a.length ? b : a));
+
+// Rough average glyph width as a fraction of font size, for a bold
+// sans-serif system font. Not pixel-perfect across every platform/font —
+// which is exactly why adjustsFontSizeToFit is kept on as a defensive
+// fallback below, rather than relied on as the primary sizing mechanism.
+const AVG_CHAR_WIDTH_RATIO = 0.58;
+
+/** Largest font size at which `text` fits within `availableWidth`, per the
+ *  heuristic above. Returns Infinity if availableWidth hasn't been
+ *  measured yet (0), so callers gracefully fall back to their other
+ *  (height-based) constraint until the real width arrives. */
+function fontSizeToFitWidth(text: string, availableWidth: number): number {
+  if (availableWidth <= 0) return Infinity;
+  return availableWidth / (text.length * AVG_CHAR_WIDTH_RATIO);
+}
+
 interface Props {
   emotion:            CoreEmotion;
   isSelected:         boolean;
   distanceFromCenter: number;
   onSelect:           (emotion: CoreEmotion, tier: EmotionTier) => void;
   onInfo:             (emotion: CoreEmotion, tier: EmotionTier) => void;
+  /**
+   * Row height in dp, computed once by EmotionWheelScreen via
+   * useWheelGeometry() and passed down. Every item in the list must agree
+   * on the same height, so it's computed in one place, not per-row.
+   */
+  itemHeight: number;
+  /**
+   * Inner content width of a side chip / the core chip, measured once by
+   * EmotionWheelScreen and shared across every row — see the comment above
+   * LONGEST_TIER_NAME for why this matters for sizing. 0 before
+   * EmotionWheelScreen has measured the wheel's real width.
+   */
+  sideChipInnerWidth: number;
+  coreChipInnerWidth: number;
 }
 
 export default function WheelItem({
-  emotion, isSelected, distanceFromCenter, onSelect, onInfo,
+  emotion, isSelected, distanceFromCenter, onSelect, onInfo, itemHeight,
+  sideChipInnerWidth, coreChipInnerWidth,
 }: Props) {
-      const { colors } = useTheme();
+      const { colors, spacing, fontSize, radius } = useTheme();
+      const { scaleFactor } = useResponsive();
 
     const styles = useMemo(
-        () => createStyles(colors),
-        [colors]
+        () => createStyles(colors, spacing, fontSize, radius, itemHeight, scaleFactor, sideChipInnerWidth, coreChipInnerWidth),
+        [colors, spacing, fontSize, radius, itemHeight, scaleFactor, sideChipInnerWidth, coreChipInnerWidth]
     );
 
   const emotionColor = EMOTION_COLORS[emotion];
@@ -123,14 +170,17 @@ export default function WheelItem({
           activeOpacity={0.7}
           disabled={!isCentered}
         >
-          <Text style={[styles.tierLabel, { color: isCentered ? emotionColor : colors.textMuted }]}>
+          <Text
+            style={[styles.tierLabel, { color: isCentered ? emotionColor : colors.textMuted }]}
+            numberOfLines={1}
+          >
             mild
           </Text>
           <Text
             style={[styles.tierName, { color: isCentered ? emotionColor : colors.textMuted }]}
-            numberOfLines={2}
+            numberOfLines={1}
             adjustsFontSizeToFit
-            minimumFontScale={0.7}
+            minimumFontScale={0.5}
           >
             {derivatives.mild}
           </Text>
@@ -148,10 +198,15 @@ export default function WheelItem({
           activeOpacity={0.8}
           disabled={!isCentered}
         >
-          <Text style={[
-            styles.coreName,
-            { color: isCentered ? colors.textDark : colors.textMuted },
-          ]}>
+          <Text
+            style={[
+              styles.coreName,
+              { color: isCentered ? colors.textDark : colors.textMuted },
+            ]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.5}
+          >
             {emotion}
           </Text>
           {isCentered && (
@@ -170,14 +225,17 @@ export default function WheelItem({
           activeOpacity={0.7}
           disabled={!isCentered}
         >
-          <Text style={[styles.tierLabel, { color: isCentered ? emotionColor : colors.textMuted }]}>
+          <Text
+            style={[styles.tierLabel, { color: isCentered ? emotionColor : colors.textMuted }]}
+            numberOfLines={1}
+          >
             intense
           </Text>
           <Text
             style={[styles.tierName, { color: isCentered ? emotionColor : colors.textMuted }]}
-            numberOfLines={2}
+            numberOfLines={1}
             adjustsFontSizeToFit
-            minimumFontScale={0.7}
+            minimumFontScale={0.5}
           >
             {derivatives.intense}
           </Text>
@@ -190,52 +248,120 @@ export default function WheelItem({
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-export const ITEM_HEIGHT = 140;
+const createStyles = (
+  colors: any, spacing: any, fontSize: any, radius: any,
+  itemHeight: number, scaleFactor: number,
+  sideChipInnerWidth: number, coreChipInnerWidth: number,
+) => {
+  // Text sizes derived from the chip's own itemHeight (already live-measured
+  // by useWheelGeometry in EmotionWheelScreen) instead of the shared theme
+  // fontSize scale. Same reasoning as the HomeScreen nav cards: itemHeight
+  // already resizes correctly for tablet, but the theme's fontSize scale
+  // is deliberately dampened for phone→tablet reading screens and doesn't
+  // track a box that's genuinely much bigger. lineHeight is derived
+  // alongside each size rather than left fixed or default — a lineHeight
+  // that doesn't track the font size clips glyphs or cramps wrapped lines.
+  //
+  // tierNameSize/coreNameSize additionally take the MIN against
+  // fontSizeToFitWidth(LONGEST_..., innerWidth) — the height-based desired
+  // size on its own doesn't know anything about how long a word needs to
+  // fit into the (much narrower) chip width, and each Text auto-shrinking
+  // independently is what caused different-length words to render at
+  // different sizes. Taking the min against the SAME worst-case-word
+  // target for every row means every row picks the same final size.
+  //
+  // Upper bounds here are generous headroom, not a target to reliably
+  // reach — itemHeight is capped at a reasonable size now (see
+  // TARGET_ITEM_HEIGHT in EmotionWheelScreen), and chip WIDTH is what
+  // actually binds these sizes in most real cases (a phone's narrow side
+  // chips hit fontSizeToFitWidth well before this height-based ceiling).
+  // The ceilings mainly exist so a tablet's wider chips, which have more
+  // width headroom, aren't needlessly held back by an overly tight
+  // height-based number.
+  const tierLabelSize = Math.round(clamp(itemHeight * 0.09, 9, 24));
+  const coreHintSize  = Math.round(clamp(itemHeight * 0.085, 9, 20));
 
-const createStyles = (colors: any) => 
-  StyleSheet.create({
+  const tierNameHeightDesired = clamp(itemHeight * 0.15, 12, 40);
+  const tierNameWidthMax      = fontSizeToFitWidth(LONGEST_TIER_NAME, sideChipInnerWidth);
+  const tierNameSize          = Math.round(clamp(Math.min(tierNameHeightDesired, tierNameWidthMax), 10, 40));
+
+  const coreNameHeightDesired = clamp(itemHeight * 0.24, 16, 64);
+  const coreNameWidthMax      = fontSizeToFitWidth(LONGEST_CORE_NAME, coreChipInnerWidth);
+  const coreNameSize          = Math.round(clamp(Math.min(coreNameHeightDesired, coreNameWidthMax), 14, 64));
+
+  const tierLabelLineHeight = Math.round(tierLabelSize * 1.3);
+  const tierNameLineHeight  = Math.round(tierNameSize  * 1.25);
+  const coreNameLineHeight  = Math.round(coreNameSize  * 1.15);
+  const coreHintLineHeight  = Math.round(coreHintSize  * 1.3);
+
+  // Scales with itemHeight for the same reason the font sizes above do —
+  // a chip with much bigger text needs proportionally more breathing room
+  // around it, not the same small fixed padding regardless of row size.
+  // Now that itemHeight itself is capped at a reasonable target (see
+  // TARGET_ITEM_HEIGHT in EmotionWheelScreen) rather than potentially
+  // growing very large, padding can afford to be a bigger fraction of it —
+  // padding is a safe, width-independent way to help the chip fill more
+  // of its row, unlike font size, which is already close to its practical
+  // ceiling on a phone (bounded by chip width, not itemHeight).
+  const chipPaddingVertical = Math.round(clamp(itemHeight * 0.22, spacing.sm, 40));
+
+  return StyleSheet.create({
   container: {
-    height:         ITEM_HEIGHT,
+    height:         itemHeight,
     justifyContent: 'center',
     alignItems:     'center',
     width:          '100%',
   },
   row: {
     flexDirection:     'row',
-    alignItems:        'stretch',
+    // Was 'stretch' — chips filled the entire (often now much taller,
+    // since itemHeight can fill most of the screen) row height, leaving
+    // the now-smaller, uniformly-sized text stranded in a tall rectangle
+    // with a lot of dead space above and below it. 'center' lets each
+    // chip size to its own content instead, so the chip itself looks
+    // properly proportioned, with any leftover row height appearing as
+    // neutral space around the chip rather than as padding inside it.
+    alignItems:        'center',
     gap:               spacing.sm,
     paddingHorizontal: spacing.lg,
     width:             '100%',
-    height:            ITEM_HEIGHT - 16,
   },
   sideChip: {
     flex:              1,
     alignItems:        'center',
     justifyContent:    'center',
-    paddingVertical:   spacing.sm,
-    paddingHorizontal: spacing.xs,
+    paddingVertical:   chipPaddingVertical,
+    // A literal 3px rather than a themed spacing value — the auto-shrink
+    // font sizing above is already fitting text tightly to the available
+    // width, so this needs to be a small precise gutter, not a themed
+    // spacing step that would eat into that width unpredictably.
+    paddingHorizontal: 3,
     borderRadius:      radius.md,
     borderWidth:       1.5,
     backgroundColor:   colors.card,
     gap:               4,
   },
   tierLabel: {
-    fontSize:      fontSize.xs,
+    fontSize:      tierLabelSize,
+    lineHeight:    tierLabelLineHeight,
     fontWeight:    '700',
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
   tierName: {
-    fontSize:   fontSize.sm,
+    fontSize:   tierNameSize,
+    lineHeight: tierNameLineHeight,
     fontWeight: '700',
     textAlign:  'center',
   },
   coreChip: {
-    flex:           1.3,
-    alignItems:     'center',
-    justifyContent: 'center',
-    borderRadius:   radius.md,
-    gap:            4,
+    flex:              1.3,
+    alignItems:        'center',
+    justifyContent:    'center',
+    paddingVertical:   chipPaddingVertical,
+    paddingHorizontal: 3,
+    borderRadius:      radius.md,
+    gap:               4,
   },
   coreSelected: {
     shadowColor:   '#ffffff',
@@ -245,11 +371,14 @@ const createStyles = (colors: any) =>
     elevation:     10,
   },
   coreName: {
-    fontSize:   fontSize.lg,
+    fontSize:   coreNameSize,
+    lineHeight: coreNameLineHeight,
     fontWeight: '800',
   },
   coreHint: {
-    color:    'rgba(0,0,0,0.4)',
-    fontSize: fontSize.xs,
+    color:      'rgba(0,0,0,0.4)',
+    fontSize:   coreHintSize,
+    lineHeight: coreHintLineHeight,
   },
-});
+  });
+};

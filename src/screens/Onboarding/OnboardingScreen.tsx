@@ -1,12 +1,10 @@
 import React, { useState, useRef, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  Dimensions, Animated, SafeAreaView,
+  Animated, SafeAreaView,
 } from 'react-native';
-import { spacing, fontSize, radius } from '../../theme';
-import { useTheme } from '../../theme/ThemeContext'; 
-
-const { width, height } = Dimensions.get('window');
+import { useTheme } from '../../theme/ThemeContext';
+import { useResponsive } from '../../theme/responsive';
 
 // ── Tooltip content — matches the 7-step spec exactly ────────────────────────
 
@@ -57,11 +55,12 @@ interface Props {
 export default function OnboardingScreen({ onComplete, onSkip }: Props) {
   const [step, setStep] = useState(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
-      const { colors } = useTheme();
+      const { colors, spacing, fontSize, radius } = useTheme();
+      const { width } = useResponsive();
 
     const styles = useMemo(
-        () => createStyles(colors),
-        [colors]
+        () => createStyles(colors, spacing, fontSize, radius, width),
+        [colors, spacing, fontSize, radius, width]
     );
 
   const current = STEPS[step];
@@ -136,7 +135,13 @@ export default function OnboardingScreen({ onComplete, onSkip }: Props) {
   );
 }
 
-const createStyles = (colors: any) => 
+// ── Styles ────────────────────────────────────────────────────────────────────
+// width is now the live value from useResponsive() instead of a module-level
+// Dimensions.get('window') snapshot, so the tooltip re-measures on rotation.
+// It's also capped at 480 so the card doesn't stretch edge-to-edge on a
+// tablet — same "respond, but don't go desktop-wide" cap used elsewhere.
+
+const createStyles = (colors: any, spacing: any, fontSize: any, radius: any, width: number) => 
   StyleSheet.create({
   container: {
     flex: 1,
@@ -180,7 +185,7 @@ const createStyles = (colors: any) =>
     elevation: 8,
   },
   tooltipCenter: {
-    width: width - spacing.lg * 2,
+    width: Math.min(width - spacing.lg * 2, 480),
   },
   tooltipTitle: {
     color: colors.purpleLight,

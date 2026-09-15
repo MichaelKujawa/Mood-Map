@@ -177,10 +177,10 @@ export function scoreSession(inputs: EmotionInput[]): DailyScoreResult {
   const totalWeighted  = round2(emotions.reduce((sum, e) => sum + e.weightedScore, 0));
 
   // Core formula: (Σ weighted / Σ intensity) × 10
-  const rawScore   = (totalWeighted / totalIntensity) * 10;
+  const rawScore   = totalWeighted / emotions.length;
   const dailyScore = round2(rawScore);
 
-  const scoreLabel    = getScoreLabel(dailyScore);
+  const scoreLabel     = getScoreLabel(dailyScore);
   const isDifficultDay = dailyScore <= -8.0;
 
   return {

@@ -7,9 +7,10 @@
 // Key naming convention:
 //   moodmap::<domain>::<identifier>
 //
-// Entry keys use the date as the identifier so they can be listed and
-// sorted without reading their values:
-//   moodmap::entry::2026-03-22
+// Entry (session) keys use the date PLUS a unique session id, because a
+// single day can now hold more than one logged entry (e.g. a morning
+// check-in and an evening check-in):
+//   moodmap::entry::2026-03-22::3fa85f64-5717-4562-b3fc-2c963f66afa6
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const STORAGE_KEYS = {
@@ -23,9 +24,10 @@ export const STORAGE_KEYS = {
 
   // ── Entries ────────────────────────────────────────────────────────────────
   /**
-   * Prefix for all entry keys. Each entry is stored individually under
-   * moodmap::entry::<YYYY-MM-DD> so we can list/filter by date
-   * without loading every entry into memory.
+   * Prefix for all entry session keys. Each session is stored individually
+   * under moodmap::entry::<YYYY-MM-DD>::<sessionId> so we can list/filter
+   * by date without loading every entry into memory, while still allowing
+   * multiple sessions to exist for the same date.
    */
   ENTRY_PREFIX: 'moodmap::entry::',
 
@@ -40,9 +42,23 @@ export const STORAGE_KEYS = {
   ALL_TIME_STATS: 'moodmap::stats::allTime',
 } as const;
 
-/** Build the storage key for a specific entry by its ISO date string */
-export function entryKey(date: string): string {
-  return `${STORAGE_KEYS.ENTRY_PREFIX}${date}`;
+/** Separator between the date portion and the session id portion of an entry key */
+const SESSION_KEY_SEPARATOR = '::';
+
+/** Build the storage key for a single entry session on a given date. */
+export function entryKey(date: string, sessionId: string): string {
+  return `${STORAGE_KEYS.ENTRY_PREFIX}${date}${SESSION_KEY_SEPARATOR}${sessionId}`;
+}
+
+/** Prefix shared by every session key belonging to a single date. */
+export function entryDatePrefix(date: string): string {
+  return `${STORAGE_KEYS.ENTRY_PREFIX}${date}${SESSION_KEY_SEPARATOR}`;
+}
+
+/** Extracts the "YYYY-MM-DD" date portion from a full entry session key. */
+export function dateFromEntryKey(key: string): string {
+  const withoutPrefix = key.slice(STORAGE_KEYS.ENTRY_PREFIX.length);
+  return withoutPrefix.split(SESSION_KEY_SEPARATOR)[0];
 }
 
 /** Build the storage key for a specific month's cached stats */

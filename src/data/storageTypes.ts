@@ -7,19 +7,47 @@
 
 import type { DailyScoreResult } from '../core/types';
 
-// ── PERSISTED ENTRY ──────────────────────────────────────────────────────────
+// ── PERSISTED ENTRY (a single session) ───────────────────────────────────────
 
 /**
- * A complete daily entry as stored in AsyncStorage.
+ * A single logged session, exactly as stored in AsyncStorage. A "session"
+ * is one sitting where the user logged one or more emotions and hit save —
+ * a user can log several sessions on the same date (e.g. morning + evening).
  * Combines the scoring result with metadata.
  */
 export interface PersistedEntry extends DailyScoreResult {
-  /** Unique identifier (UUID v4) */
+  /** Unique identifier (UUID v4) for this session */
   readonly id: string;
-  /** ISO date string "YYYY-MM-DD" — also used as the storage key suffix */
+  /** ISO date string "YYYY-MM-DD" this session was logged against */
   readonly date: string;
-  /** ISO timestamp of when the entry was created */
+  /** ISO timestamp of when the session was created */
   readonly createdAt: string;
+}
+
+// ── DAILY AGGREGATE (a whole date, built from 1+ sessions) ──────────────────
+
+/**
+ * The combined view of a single calendar date, built from every
+ * PersistedEntry session logged that day. This is what most of the app
+ * (History, Home, Reports, stats) reads — it behaves like the old
+ * "one entry per day" model, but its numbers are derived across every
+ * session logged that date rather than a single overwritten entry.
+ *
+ * - `dailyScore` is the plain average of each session's own dailyScore,
+ *   so each check-in counts equally regardless of how many emotions
+ *   it contained.
+ * - `emotions` / `totalIntensity` / `totalWeighted` are combined across
+ *   every session that day, so tables and journal-note views naturally
+ *   show everything logged, no matter how many sittings it came from.
+ */
+export interface DailyAggregate extends DailyScoreResult {
+  readonly date: string;
+  /** How many separate sessions were logged on this date */
+  readonly sessionCount: number;
+  /** The individual sessions that make up this date, newest first */
+  readonly sessions: PersistedEntry[];
+  /** createdAt of the most recently logged session, for sorting/display */
+  readonly latestCreatedAt: string;
 }
 
 // ── MONTHLY STATS ────────────────────────────────────────────────────────────

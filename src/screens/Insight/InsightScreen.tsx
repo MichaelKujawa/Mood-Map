@@ -3,11 +3,10 @@ import {
   View, Text, StyleSheet, ScrollView, SafeAreaView,
   TouchableOpacity, Modal,
 } from 'react-native';
-import { spacing, fontSize, radius } from '../../theme';
 import { useTheme } from '../../theme/ThemeContext'; 
 import { store } from '../../data/store';
 import { isTrendDeclining, checkPattern } from '../../core/scoringEngine';
-import type { PersistedEntry } from '../../data/storageTypes';
+import type { DailyAggregate } from '../../data/storageTypes';
 
 // ── Article content system ────────────────────────────────────────────────────
 // Articles are stored here as structured data.
@@ -771,11 +770,11 @@ function ArticleModal({
   article: Article;
   onClose: () => void;
 }) {
-  const { colors } = useTheme();
+  const { colors, spacing, fontSize, radius } = useTheme();
 
   const modalStyles = useMemo(
-    () => createModalStyles(colors),
-    [colors]
+    () => createModalStyles(colors, spacing, fontSize, radius),
+    [colors, spacing, fontSize, radius]
   );
   return (
     <Modal visible animationType="slide" onRequestClose={onClose}>
@@ -802,7 +801,7 @@ function ArticleModal({
   );
 }
 
-const createModalStyles = (colors: any) => 
+const createModalStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   container: {
     flex:            1,
@@ -865,12 +864,12 @@ interface Props {
 }
 
 export default function InsightScreen({ onClose }: Props) {
-  const { colors } = useTheme();
+  const { colors, spacing, fontSize, radius } = useTheme();
   const styles = useMemo(
-        () => createStyles(colors),
-        [colors]
+        () => createStyles(colors, spacing, fontSize, radius),
+        [colors, spacing, fontSize, radius]
     );
-  const [entries, setEntries]                 = useState<PersistedEntry[]>([]);
+  const [entries, setEntries]                 = useState<DailyAggregate[]>([]);
   const [topEmotion, setTopEmotion]           = useState<string | null>(null);
   const [isDeclining, setIsDeclining]         = useState(false);
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
@@ -1052,7 +1051,7 @@ export default function InsightScreen({ onClose }: Props) {
   );
 }
 
-const createStyles = (colors: any) => 
+const createStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   container: {
     flex:            1,

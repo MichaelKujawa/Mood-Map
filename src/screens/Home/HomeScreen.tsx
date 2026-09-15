@@ -1,16 +1,12 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
-  Dimensions, SafeAreaView, ScrollView,
+  View, Text, StyleSheet, TouchableOpacity, SafeAreaView,
+  type LayoutChangeEvent,
 } from 'react-native';
-import { spacing, fontSize, radius } from '../../theme';
 import { store } from '../../data/store';
-import type { PersistedEntry } from '../../data/storageTypes';
+import type { DailyAggregate } from '../../data/storageTypes';
 import Svg, { Line, Circle, Path } from 'react-native-svg';
 import { useTheme } from '../../theme/ThemeContext';
-
-const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - spacing.lg * 2 - spacing.md) / 2;
 
 // ── Navigation cards ──────────────────────────────────────────────────────────
 
@@ -27,30 +23,33 @@ interface Props {
   onNavigate: (screen: NavId) => void;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
 // ── Graph ─────────────────────────────────────────────────────────────────────
 
 interface GraphProps {
-  entries: PersistedEntry[];
+  entries:     DailyAggregate[];
+  graphWidth:  number;
+  graphHeight: number;
 }
 
-function MiniGraph({ entries }: GraphProps) {
-  const {colors} = useTheme();
-  const styles = useMemo(
-        () => createStyles(colors),
-        [colors]
-    );
-  const graphWidth  = width - spacing.lg * 2 - spacing.md * 2 - 32;
-  const graphHeight = 160;
+function MiniGraph({ entries, graphWidth, graphHeight }: GraphProps) {
+  const { colors } = useTheme();
+
   const padX = 12;
   const padY = 16;
-  const innerW = graphWidth - padX * 2;
-  const innerH = graphHeight - padY * 2;
+  const innerW = Math.max(0, graphWidth - padX * 2);
+  const innerH = Math.max(0, graphHeight - padY * 2);
+
+  if (graphWidth <= 0 || graphHeight <= 0) return null;
 
   if (entries.length === 0) {
     return (
-      <View style={[styles.graphEmpty, { height: graphHeight }]}>
-        <Text style={styles.graphEmptyIcon}>📈</Text>
-        <Text style={styles.graphEmptyText}>
+      <View style={[localStyles.graphEmpty, { width: graphWidth, height: graphHeight }]}>
+        <Text style={localStyles.graphEmptyIcon}>📈</Text>
+        <Text style={[localStyles.graphEmptyText, { color: colors.textMuted }]}>
           Begin entering data to{'\n'}generate your graph
         </Text>
       </View>
@@ -80,47 +79,20 @@ function MiniGraph({ entries }: GraphProps) {
   const ty1 = slope * px(0) + intercept;
   const ty2 = slope * px(n - 1) + intercept;
 
-  // Build SVG path for the score line
   const pathD = scores
     .map((score, i) => `${i === 0 ? 'M' : 'L'} ${px(i)} ${py(score)}`)
     .join(' ');
 
   return (
     <Svg width={graphWidth} height={graphHeight}>
-      {/* Zero line */}
-      <Line
-        x1={padX}
-        y1={py(0)}
-        x2={graphWidth - padX}
-        y2={py(0)}
-        stroke={colors.border}
-        strokeWidth={1}
-      />
+      <Line x1={padX} y1={py(0)} x2={graphWidth - padX} y2={py(0)} stroke={colors.border} strokeWidth={1} />
 
-      {/* Trend line */}
       {n > 1 && (
-        <Line
-          x1={px(0)}
-          y1={ty1}
-          x2={px(n - 1)}
-          y2={ty2}
-          stroke={colors.gold}
-          strokeWidth={2}
-          strokeDasharray="4 3"
-        />
+        <Line x1={px(0)} y1={ty1} x2={px(n - 1)} y2={ty2} stroke={colors.gold} strokeWidth={2} strokeDasharray="4 3" />
       )}
 
-      {/* Score line */}
-      <Path
-        d={pathD}
-        stroke={colors.white}
-        strokeWidth={2}
-        fill="none"
-        strokeLinejoin="round"
-        strokeLinecap="round"
-      />
+      <Path d={pathD} stroke={colors.white} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
 
-      {/* Data points */}
       {scores.map((score, i) => (
         <Circle
           key={i}
@@ -136,17 +108,131 @@ function MiniGraph({ entries }: GraphProps) {
   );
 }
 
+// A couple of graph-internal styles that don't depend on the theme's
+// live-scaled spacing (kept local/static rather than threaded through
+// createStyles since MiniGraph only needs colors here).
+const localStyles = StyleSheet.create({
+  graphEmpty: {
+    justifyContent: 'center',
+    alignItems:     'center',
+    gap:            8,
+  },
+  graphEmptyIcon: {
+    fontSize: 32,
+  },
+  graphEmptyText: {
+    fontSize:   13,
+    textAlign:  'center',
+    lineHeight: 20,
+  },
+});
+
 // ── Home screen ───────────────────────────────────────────────────────────────
+//
+// Layout model: the screen below the header is split exactly 50/50 between
+// the graph and the nav grid — a row split in landscape (graph left, grid
+// right), a column split in portrait (graph top, grid bottom). Both halves
+// use flex:1 so they fill 100% of the available space in both directions;
+// there's no phone/tablet branching here anymore, just orientation. The nav
+// grid itself is always a fixed 2×2 layout that fills its half completely,
+// each button taking exactly one quarter of that half's area.
+//
+// This intentionally does NOT use the MAX_CONTENT_WIDTH cap from
+// responsive.ts — that cap exists to stop content going full-bleed on a
+// big screen, which directly conflicts with "fill all available space"
+// here. Worth deciding deliberately whether other screens should follow
+// suit, rather than this one silently diverging.
 
 export default function HomeScreen({ onNavigate }: Props) {
-  const {colors} = useTheme();
-  const styles = useMemo(
-        () => createStyles(colors),
-        [colors]
-    );
-  const [recentEntries, setRecentEntries] = useState<PersistedEntry[]>([]);
+  const { colors, spacing, fontSize, radius, isLandscape } = useTheme();
+
+  const styles = createStyles(colors, spacing, radius, fontSize);
+
+  const [recentEntries, setRecentEntries] = useState<DailyAggregate[]>([]);
   const [todayScore, setTodayScore]       = useState<number | null>(null);
-  const [loading, setLoading]             = useState(true);
+
+  // Measured live, same technique as itemHeight/wheelHeight in the wheel
+  // screen — the graph row's actual rendered size is the real available
+  // space, not a guessed fraction of the screen. Reset on orientation
+  // flip so a stale measurement from the other layout can't briefly be
+  // used to size the graph wrong for a frame.
+  const [graphRowSize, setGraphRowSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    setGraphRowSize({ width: 0, height: 0 });
+  }, [isLandscape]);
+
+  function onGraphRowLayout(e: LayoutChangeEvent) {
+    const { width, height } = e.nativeEvent.layout;
+    setGraphRowSize({ width, height });
+  }
+
+  // Graph label sizes now scale with the graph's own measured size instead
+  // of the shared theme fontSize scale — same reasoning as the nav grid
+  // below: these boxes are much bigger than the design was originally
+  // tuned for, and the theme's dampened scale doesn't track that.
+  const graphMinDim = Math.min(graphRowSize.width, graphRowSize.height);
+  const graphLabelSize = Math.round(clamp(graphMinDim * 0.045, 10, 20));
+
+  // yAxis width was a fixed 28dp, sized for the old fixed ~11pt label —
+  // once labels scale up with graphLabelSize, "-10" (3 characters) no
+  // longer fits and wraps onto two lines ("-1" / "0"). Widened
+  // proportionally to the actual label size instead of a fixed constant.
+  const yAxisWidth = Math.max(28, Math.round(graphLabelSize * 2.6)) + spacing.xs;
+  const graphWidth  = Math.max(0, graphRowSize.width - yAxisWidth);
+  const graphHeight = graphRowSize.height;
+
+  // Line heights derived alongside each dynamic font size rather than
+  // left at a fixed value or RN's default — a lineHeight that doesn't
+  // track a font size ranging anywhere from ~11pt to ~32pt either clips
+  // glyphs at the top (too tight) or cramps wrapped lines (also too
+  // tight, just less obviously so until text actually wraps).
+  const graphLabelLineHeight = Math.round(graphLabelSize * 1.3);
+
+  // The nav grid's actual rendered size — measured the same way as the
+  // graph row, since a fixed 2×2 grid filling half the screen is a very
+  // different size than the wrap-grid this screen used to have, and the
+  // shared theme fontSize scale (deliberately dampened for phone→tablet
+  // reading screens) doesn't track boxes this large. Reset alongside
+  // graphRowSize on orientation flip for the same reason.
+  const [navHalfSize, setNavHalfSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    setNavHalfSize({ width: 0, height: 0 });
+  }, [isLandscape]);
+
+  function onNavHalfLayout(e: LayoutChangeEvent) {
+    const { width, height } = e.nativeEvent.layout;
+    setNavHalfSize({ width, height });
+  }
+
+  const quadrantWidth  = navHalfSize.width / 2;
+  const quadrantHeight = navHalfSize.height / 2;
+  const quadrantMinDim = Math.min(quadrantWidth, quadrantHeight);
+
+  // Scaled off the smaller quadrant dimension so text never overflows a
+  // narrow quadrant even if the other dimension is generous. Clamped so
+  // it can't go illegibly small on a tiny phone quadrant or comically
+  // large on a big tablet.
+  const navIconSize        = Math.round(clamp(quadrantMinDim * 0.24,  28, 96));
+  const navLabelSize       = Math.round(clamp(quadrantMinDim * 0.115, 14, 32));
+  const navDescriptionSize = Math.round(clamp(quadrantMinDim * 0.075, 11, 20));
+
+  // Same reasoning as graphLabelLineHeight above. The icon gets the
+  // smallest multiplier since emoji glyphs need less headroom than Latin
+  // text with ascenders/descenders; the description gets the most since
+  // it's the one most likely to actually wrap to a second line.
+  const navIconLineHeight        = Math.round(navIconSize * 1.15);
+  const navLabelLineHeight       = Math.round(navLabelSize * 1.25);
+  const navDescriptionLineHeight = Math.round(navDescriptionSize * 1.4);
+
+  // Padding was dropped when the wrap-grid became a fixed 2×2 grid — with
+  // no padding, text runs right up to the card border, especially
+  // noticeable in landscape where quadrants are wider than they are tall.
+  // Scaled the same way as the text sizes above rather than a fixed
+  // spacing.lg, so it stays proportionate whether the quadrant is a small
+  // phone-landscape box or a huge tablet one.
+  const navCardPadding = Math.round(clamp(quadrantMinDim * 0.09, spacing.md, 40));
 
   useEffect(() => {
     async function loadData() {
@@ -158,108 +244,100 @@ export default function HomeScreen({ onNavigate }: Props) {
         const todayEntry = entries.find(e => e.date === today);
         if (todayEntry) setTodayScore(todayEntry.dailyScore);
       }
-      setLoading(false);
     }
     loadData();
   }, []);
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.appName}>MoodMap</Text>
-          {todayScore !== null && (
-            <View style={styles.todayBadge}>
-              <Text style={styles.todayBadgeText}>
-                Today: {todayScore > 0 ? '+' : ''}{todayScore.toFixed(1)}
-              </Text>
-            </View>
-          )}
-        </View>
 
-        {/* Graph card */}
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.appName}>MoodMap</Text>
+        {todayScore !== null && (
+          <View style={styles.todayBadge}>
+            <Text style={styles.todayBadgeText}>
+              Today: {todayScore > 0 ? '+' : ''}{todayScore.toFixed(1)}
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Body — 50/50 split, direction follows orientation */}
+      <View style={[styles.body, { flexDirection: isLandscape ? 'row' : 'column' }]}>
+
+        {/* Graph half */}
         <View style={styles.graphCard}>
-
-          {/* Graph area with axis labels side by side */}
-          <View style={styles.graphRow}>
-            {/* Y-axis labels */}
-            <View style={styles.yAxis}>
-              <Text style={styles.axisLabel}>10</Text>
-              <Text style={styles.axisLabel}>0</Text>
-              <Text style={styles.axisLabel}>-10</Text>
+          <View style={styles.graphRow} onLayout={onGraphRowLayout}>
+            <View style={[styles.yAxis, { width: yAxisWidth - spacing.xs }]}>
+              <Text style={[styles.axisLabel, { fontSize: graphLabelSize, lineHeight: graphLabelLineHeight }]} numberOfLines={1}>10</Text>
+              <Text style={[styles.axisLabel, { fontSize: graphLabelSize, lineHeight: graphLabelLineHeight }]} numberOfLines={1}>0</Text>
+              <Text style={[styles.axisLabel, { fontSize: graphLabelSize, lineHeight: graphLabelLineHeight }]} numberOfLines={1}>-10</Text>
             </View>
 
-            {/* Graph */}
-            {!loading && <MiniGraph entries={recentEntries} />}
+            <MiniGraph entries={recentEntries} graphWidth={graphWidth} graphHeight={graphHeight} />
           </View>
 
-          {/* Footer: x-axis label + legend */}
           <View style={styles.graphFooter}>
-            <Text style={styles.xAxisLabel}>Entry Date</Text>
+            <Text style={[styles.xAxisLabel, { fontSize: graphLabelSize, lineHeight: graphLabelLineHeight }]}>Entry Date</Text>
             <View style={styles.trendLegend}>
               <View style={styles.trendSwatch} />
-              <Text style={styles.legendText}>Trend line</Text>
+              <Text style={[styles.legendText, { fontSize: graphLabelSize, lineHeight: graphLabelLineHeight }]}>Trend line</Text>
             </View>
           </View>
-
         </View>
 
-        {/* Navigation cards */}
-        <View style={styles.navGrid}>
+        {/* Nav half — fixed 2×2 grid filling its half completely */}
+        <View style={styles.navHalf} onLayout={onNavHalfLayout}>
           {NAV_CARDS.map(card => (
-            <TouchableOpacity
-              key={card.id}
-              style={[
-                styles.navCard,
-                card.id === 'newEntry' && styles.navCardAccent,
-              ]}
-              onPress={() => onNavigate(card.id)}
-              activeOpacity={0.75}
-            >
-              <Text style={styles.navIcon}>{card.icon}</Text>
-              <Text style={styles.navLabel}>{card.label}</Text>
-              <Text style={[
-                styles.navDescription,
-                card.id === 'newEntry' && styles.navDescriptionAccent,
-              ]}>
-                {card.description}
-              </Text>
-            </TouchableOpacity>
+            <View key={card.id} style={styles.navQuadrant}>
+              <TouchableOpacity
+                style={[
+                  styles.navCard,
+                  { padding: navCardPadding },
+                  card.id === 'newEntry' && styles.navCardAccent,
+                ]}
+                onPress={() => onNavigate(card.id)}
+                activeOpacity={0.75}
+              >
+                <Text style={[styles.navIcon, { fontSize: navIconSize, lineHeight: navIconLineHeight }]}>{card.icon}</Text>
+                <Text style={[styles.navLabel, { fontSize: navLabelSize, lineHeight: navLabelLineHeight }]}>{card.label}</Text>
+                <Text style={[
+                  styles.navDescription,
+                  { fontSize: navDescriptionSize, lineHeight: navDescriptionLineHeight },
+                  card.id === 'newEntry' && styles.navDescriptionAccent,
+                ]}>
+                  {card.description}
+                </Text>
+              </TouchableOpacity>
+            </View>
           ))}
         </View>
 
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
-const createStyles = (colors: any) => 
+const createStyles = (colors: any, spacing: any, radius: any, fontSize?: any) =>
   StyleSheet.create({
   container: {
     flex:            1,
     backgroundColor: colors.background,
   },
-  scroll: {
-    padding:       spacing.lg,
-    paddingBottom: spacing.xxl,
-  },
-
-  // Header
   header: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'space-between',
-    marginBottom:   spacing.lg,
+    flexDirection:     'row',
+    alignItems:        'center',
+    justifyContent:    'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop:        spacing.md,
+    paddingBottom:     spacing.md,
   },
   appName: {
     color:         colors.purpleLight,
-    fontSize:      fontSize.xl,
+    fontSize:      fontSize?.xl ?? 26,
     fontWeight:    '800',
     letterSpacing: 1,
   },
@@ -271,44 +349,52 @@ const createStyles = (colors: any) =>
   },
   todayBadgeText: {
     color:      colors.white,
-    fontSize:   fontSize.sm,
+    fontSize:   fontSize?.sm ?? 13,
     fontWeight: '700',
   },
 
-  // Graph card
+  // 50/50 split — flexDirection set inline based on isLandscape
+  body: {
+    flex: 1,
+    gap:  spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingBottom:     spacing.lg,
+  },
+
   graphCard: {
+    flex:            1,
     backgroundColor: colors.card,
     borderRadius:    radius.lg,
     padding:         spacing.md,
-    marginBottom:    spacing.lg,
     borderWidth:     1,
     borderColor:     colors.border,
   },
   graphRow: {
+    flex:          1,
     flexDirection: 'row',
     alignItems:    'stretch',
   },
   yAxis: {
+    // width applied inline via yAxisWidth (label-size-driven)
     justifyContent: 'space-between',
     paddingVertical: 16,
     marginRight:     spacing.xs,
-    width:           28,
   },
   axisLabel: {
+    // fontSize applied inline via graphLabelSize (measurement-driven)
     color:     colors.textMuted,
-    fontSize:  fontSize.xs,
     textAlign: 'right',
   },
   graphFooter: {
-    flexDirection:  'row',
-    justifyContent: 'space-between',
-    alignItems:     'center',
-    marginTop:      spacing.md,
+    flexDirection:     'row',
+    justifyContent:    'space-between',
+    alignItems:        'center',
+    paddingTop:        spacing.sm,
     paddingHorizontal: spacing.xs,
   },
   xAxisLabel: {
-    color:    colors.textMuted,
-    fontSize: fontSize.xs,
+    // fontSize applied inline via graphLabelSize (measurement-driven)
+    color: colors.textMuted,
   },
   trendLegend: {
     flexDirection: 'row',
@@ -322,55 +408,30 @@ const createStyles = (colors: any) =>
     borderRadius:    radius.full,
   },
   legendText: {
-    color:    colors.textMuted,
-    fontSize: fontSize.xs,
+    // fontSize applied inline via graphLabelSize (measurement-driven)
+    color: colors.textMuted,
   },
 
-  // Graph internals
-  zeroLine: {
-    position:        'absolute',
-    height:          1,
-    backgroundColor: colors.border,
-  },
-  dataPoint: {
-    position:     'absolute',
-    width:        12,
-    height:       12,
-    borderRadius: radius.full,
-    borderWidth:  2,
-    borderColor:  colors.background,
-  },
-
-  // Empty graph state
-  graphEmpty: {
-    flex:           1,
-    justifyContent: 'center',
-    alignItems:     'center',
-    gap:            spacing.sm,
-  },
-  graphEmptyIcon: {
-    fontSize: 32,
-  },
-  graphEmptyText: {
-    color:      colors.textMuted,
-    fontSize:   fontSize.sm,
-    textAlign:  'center',
-    lineHeight: 20,
-  },
-
-  // Navigation cards
-  navGrid: {
+  // Nav half — a fixed 2×2 grid. Each quadrant is exactly 50% x 50% of
+  // the nav half; padding on the quadrant (rather than `gap` on the row)
+  // creates the visual gutter between cards without any risk of a wrap
+  // row overflowing past 100% width.
+  navHalf: {
+    flex:          1,
     flexDirection: 'row',
     flexWrap:      'wrap',
-    gap:           spacing.md,
-    marginTop:     spacing.sm,
+  },
+  navQuadrant: {
+    width:   '50%',
+    height:  '50%',
+    padding: spacing.sm / 2,
   },
   navCard: {
-    width:           CARD_WIDTH,
+    flex:            1,
     backgroundColor: colors.card,
     borderRadius:    radius.lg,
-    padding:         spacing.lg,
     alignItems:      'center',
+    justifyContent:  'center',
     gap:             spacing.sm,
     borderWidth:     1,
     borderColor:     colors.border,
@@ -380,19 +441,18 @@ const createStyles = (colors: any) =>
     borderColor:     colors.purpleLight,
   },
   navIcon: {
-    fontSize:     32,
+    // fontSize applied inline via navIconSize (quadrant-measurement-driven)
     marginBottom: spacing.xs,
   },
   navLabel: {
+    // fontSize applied inline via navLabelSize (quadrant-measurement-driven)
     color:      colors.white,
-    fontSize:   fontSize.md,
     fontWeight: '700',
   },
   navDescription: {
-    color:      colors.textMuted,
-    fontSize:   fontSize.sm,
-    textAlign:  'center',
-    lineHeight: 18,
+    // fontSize/lineHeight applied inline via navDescriptionSize/navDescriptionLineHeight
+    color:     colors.textMuted,
+    textAlign: 'center',
   },
   navDescriptionAccent: {
     color: 'rgba(255,255,255,0.75)',

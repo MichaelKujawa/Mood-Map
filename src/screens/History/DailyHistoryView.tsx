@@ -3,13 +3,12 @@ import {
   View, Text, StyleSheet, ScrollView,
   SafeAreaView, TouchableOpacity,
 } from 'react-native';
-import { spacing, fontSize, radius } from '../../theme';
 import { useTheme } from '../../theme/ThemeContext'; 
 import { EMOTION_COLORS } from '../EmotionWheel/WheelItem';
-import type { PersistedEntry } from '../../data/storageTypes';
+import type { DailyAggregate } from '../../data/storageTypes';
 
 interface Props {
-  entry:   PersistedEntry;
+  entry:   DailyAggregate;
   onClose: () => void;
 }
 
@@ -19,16 +18,25 @@ function scoreColor(score: number, colors: any): string {
   return '#EF5350';
 }
 
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', {
+    hour:   'numeric',
+    minute: '2-digit',
+  });
+}
+
 export default function DailyHistoryView({ entry, onClose }: Props) {
-  const { colors } = useTheme();
+  const { colors, spacing, fontSize, radius } = useTheme();
 
   const styles = useMemo(
-    () => createStyles(colors),
-    [colors]
+    () => createStyles(colors, spacing, fontSize, radius),
+    [colors, spacing, fontSize, radius]
   );
 
   const labelColor = scoreColor(entry.dailyScore, colors);
   const date = new Date(entry.date + 'T12:00:00');
+  const hasMultipleSessions = entry.sessionCount > 1;
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -50,19 +58,60 @@ export default function DailyHistoryView({ entry, onClose }: Props) {
                 year:    'numeric',
               })}
             </Text>
+            {hasMultipleSessions && (
+              <Text style={styles.headerSub}>
+                {entry.sessionCount} entries logged this day
+              </Text>
+            )}
           </View>
         </View>
 
         {/* Score card */}
         <View style={[styles.scoreCard, { borderColor: labelColor }]}>
-          <Text style={styles.scoreLabel}>Daily Score</Text>
+          <Text style={styles.scoreLabel}>
+            {hasMultipleSessions ? 'Average Daily Score' : 'Daily Score'}
+          </Text>
           <Text style={[styles.scoreNumber, { color: labelColor }]}>
             {entry.dailyScore > 0 ? '+' : ''}{entry.dailyScore.toFixed(2)}
           </Text>
           <View style={[styles.scoreBadge, { backgroundColor: labelColor }]}>
             <Text style={styles.scoreBadgeText}>{entry.scoreLabel}</Text>
           </View>
+          {hasMultipleSessions && (
+            <Text style={styles.scoreCardHint}>
+              Averaged across {entry.sessionCount} entries logged today
+            </Text>
+          )}
         </View>
+
+        {/* Per-session breakdown — only shown when there's more than one entry */}
+        {hasMultipleSessions && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Entries This Day</Text>
+            <View style={styles.sessionsTable}>
+              {entry.sessions.map((session, i) => {
+                const sColor = scoreColor(session.dailyScore, colors);
+                return (
+                  <View
+                    key={session.id}
+                    style={[styles.sessionRow, i % 2 === 0 && styles.sessionRowAlt]}
+                  >
+                    <Text style={styles.sessionTime}>{formatTime(session.createdAt)}</Text>
+                    <Text
+                      style={styles.sessionEmotions}
+                      numberOfLines={1}
+                    >
+                      {session.emotions.map(e => e.derivative).join(' · ')}
+                    </Text>
+                    <Text style={[styles.sessionScore, { color: sColor }]}>
+                      {session.dailyScore > 0 ? '+' : ''}{session.dailyScore.toFixed(1)}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
 
         {/* Emotions felt */}
         <View style={styles.section}>
@@ -158,7 +207,7 @@ export default function DailyHistoryView({ entry, onClose }: Props) {
   );
 }
 
-const createStyles = (colors: any) => 
+const createStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   container: {
     flex:            1,
@@ -190,12 +239,17 @@ const createStyles = (colors: any) =>
   },
   headerText: {
     flex: 1,
+    gap:  2,
   },
   headerDate: {
     color:      colors.white,
     fontSize:   fontSize.md,
     fontWeight: '700',
     lineHeight: 24,
+  },
+  headerSub: {
+    color:    colors.textMuted,
+    fontSize: fontSize.xs,
   },
 
   // Score card
@@ -229,6 +283,12 @@ const createStyles = (colors: any) =>
     fontSize:   fontSize.md,
     fontWeight: '700',
   },
+  scoreCardHint: {
+    color:     colors.textMuted,
+    fontSize:  fontSize.xs,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
 
   // Sections
   section: {
@@ -238,6 +298,41 @@ const createStyles = (colors: any) =>
     color:      colors.white,
     fontSize:   fontSize.md,
     fontWeight: '700',
+  },
+
+  // Per-session table
+  sessionsTable: {
+    backgroundColor: colors.card,
+    borderRadius:    radius.lg,
+    overflow:        'hidden',
+    borderWidth:     1,
+    borderColor:     colors.border,
+  },
+  sessionRow: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    paddingVertical:   spacing.sm,
+    paddingHorizontal: spacing.md,
+    gap:               spacing.md,
+  },
+  sessionRowAlt: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  sessionTime: {
+    color:      colors.textMuted,
+    fontSize:   fontSize.xs,
+    width:      68,
+    flexShrink: 0,
+  },
+  sessionEmotions: {
+    color:    colors.white,
+    fontSize: fontSize.sm,
+    flex:     1,
+  },
+  sessionScore: {
+    fontSize:   fontSize.sm,
+    fontWeight: '800',
+    flexShrink: 0,
   },
 
   // Emotions table

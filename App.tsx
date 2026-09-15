@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, ActivityIndicator, Alert, BackHandler, Platform } from 'react-native';
 import { store } from './src/data/store';
 import { colors } from './src/theme';
 import { ThemeProvider } from './src/theme/ThemeContext';
@@ -58,13 +58,141 @@ function AppInner() {
     setScreen('summary');
   }
 
-  function handleWheelDone() {
+  // ── Named navigation actions ────────────────────────────────────────────
+  // Pulled out (rather than left as inline JSX closures) so the hardware
+  // back button below can trigger the exact same logic as the on-screen
+  // back/close buttons.
+
+  const goHome = useCallback(() => {
+    setScreen('home');
+  }, []);
+
+  const handleWheelClose = useCallback(() => {
     if (completedEmotions.length > 0) {
-      setScreen('summary');
+      Alert.alert(
+        'Discard Entry?',
+        'You have emotions saved in this session. Going back will lose all of them.',
+        [
+          { text: 'Keep Editing', style: 'cancel' },
+          {
+            text:  'Discard',
+            style: 'destructive',
+            onPress: () => {
+              setCompletedEmotions([]);
+              setCurrentEmotion(null);
+              setScreen('home');
+            },
+          },
+        ],
+      );
     } else {
       setScreen('home');
     }
-  }
+  }, [completedEmotions.length]);
+
+  const handleChildrenWheelClose = useCallback(() => {
+    if (completedEmotions.length > 0) {
+      Alert.alert(
+        'Discard Entry?',
+        'You have emotions saved. Going back will lose all of them.',
+        [
+          { text: 'Keep Going', style: 'cancel' },
+          {
+            text:  'Discard',
+            style: 'destructive',
+            onPress: () => {
+              setCompletedEmotions([]);
+              setScreen('home');
+            },
+          },
+        ],
+      );
+    } else {
+      setScreen('home');
+    }
+  }, [completedEmotions.length]);
+
+  const handleChildrenWheelDone = useCallback(() => {
+    setScreen(completedEmotions.length > 0 ? 'summary' : 'home');
+  }, [completedEmotions.length]);
+
+  const handleDetailBack = useCallback(() => {
+    setCurrentEmotion(null);
+    setScreen('wheel');
+  }, []);
+
+  const handleSummaryEdit = useCallback(() => {
+    setScreen('wheel');
+  }, []);
+
+  const handleSummarySave = useCallback(() => {
+    setCompletedEmotions([]);
+    setScreen('home');
+  }, []);
+
+  const handleViewTutorial = useCallback(() => {
+    store.setOnboardingComplete();
+    setScreen('onboarding');
+  }, []);
+
+  // ── Hardware back button (Android) ──────────────────────────────────────
+  // Without this, Android's back gesture/button exits the whole app instead
+  // of stepping back through the in-app screen stack, since this app drives
+  // navigation off local state rather than @react-navigation's stack.
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+
+    const onBackPress = () => {
+      switch (screen) {
+        case 'home':
+          // Root screen — let the OS handle it (background/exit the app),
+          // which matches standard Android convention.
+          return false;
+
+        case 'wheel':
+          if (childrenMode) {
+            handleChildrenWheelClose();
+          } else {
+            handleWheelClose();
+          }
+          return true;
+
+        case 'detail':
+          handleDetailBack();
+          return true;
+
+        case 'summary':
+          handleSummaryEdit();
+          return true;
+
+        case 'history':
+        case 'insight':
+        case 'settings':
+        case 'report':
+          goHome();
+          return true;
+
+        case 'onboarding':
+          // Don't let back-button skip out of onboarding early.
+          return true;
+
+        default:
+          return false;
+      }
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [
+    screen,
+    childrenMode,
+    goHome,
+    handleWheelClose,
+    handleChildrenWheelClose,
+    handleDetailBack,
+    handleSummaryEdit,
+  ]);
 
   if (screen === 'loading') {
     return (
@@ -90,34 +218,8 @@ function AppInner() {
           onEmotionCompleted={(completed) => {
             setCompletedEmotions(prev => [...prev, completed]);
           }}
-          onDone={() => {
-            if (completedEmotions.length > 0) {
-              setScreen('summary');
-            } else {
-              setScreen('home');
-            }
-          }}
-          onClose={() => {
-            if (completedEmotions.length > 0) {
-              Alert.alert(
-                'Discard Entry?',
-                'You have emotions saved. Going back will lose all of them.',
-                [
-                  { text: 'Keep Going', style: 'cancel' },
-                  {
-                    text: 'Discard',
-                    style: 'destructive',
-                    onPress: () => {
-                      setCompletedEmotions([]);
-                      setScreen('home');
-                    },
-                  },
-                ],
-              );
-            } else {
-              setScreen('home');
-            }
-          }}
+          onDone={handleChildrenWheelDone}
+          onClose={handleChildrenWheelClose}
           completedCount={completedEmotions.length}
         />
       );
@@ -126,29 +228,8 @@ function AppInner() {
     return (
       <EmotionWheelScreen
         onEmotionConfirmed={handleEmotionSelected}
-        onDone={handleWheelDone}
-        onClose={() => {
-          if (completedEmotions.length > 0) {
-            Alert.alert(
-              'Discard Entry?',
-              'You have emotions saved in this session. Going back will lose all of them.',
-              [
-                { text: 'Keep Editing', style: 'cancel' },
-                {
-                  text: 'Discard',
-                  style: 'destructive',
-                  onPress: () => {
-                    setCompletedEmotions([]);
-                    setCurrentEmotion(null);
-                    setScreen('home');
-                  },
-                },
-              ],
-            );
-          } else {
-            setScreen('home');
-          }
-        }}
+        onDone={() => setScreen(completedEmotions.length > 0 ? 'summary' : 'home')}
+        onClose={handleWheelClose}
         selectedCount={completedEmotions.length}
       />
     );
@@ -163,10 +244,7 @@ function AppInner() {
         entryNumber={completedEmotions.length + 1}
         totalSoFar={completedEmotions.length}
         onConfirm={handleEmotionCompleted}
-        onBack={() => {
-          setCurrentEmotion(null);
-          setScreen('wheel');
-        }}
+        onBack={handleDetailBack}
         onDone={handleDetailDone}
       />
     );
@@ -176,31 +254,25 @@ function AppInner() {
     return (
       <EntrySummaryScreen
         emotions={completedEmotions}
-        onSave={() => {
-          setCompletedEmotions([]);
-          setScreen('home');
-        }}
-        onEdit={() => setScreen('wheel')}
+        onSave={handleSummarySave}
+        onEdit={handleSummaryEdit}
       />
     );
   }
 
   if (screen === 'history') {
-    return <HistoryScreen onClose={() => setScreen('home')} />;
+    return <HistoryScreen onClose={goHome} />;
   }
 
   if (screen === 'insight') {
-    return <InsightScreen onClose={() => setScreen('home')} />;
+    return <InsightScreen onClose={goHome} />;
   }
 
   if (screen === 'settings') {
     return (
       <SettingsScreen
-        onClose={() => setScreen('home')}
-        onViewTutorial={() => {
-          store.setOnboardingComplete();
-          setScreen('onboarding');
-        }}
+        onClose={goHome}
+        onViewTutorial={handleViewTutorial}
         onGenerateReport={() => setScreen('report')}
         onChildrenModeChange={(enabled) => setChildrenMode(enabled)}
       />
@@ -208,7 +280,7 @@ function AppInner() {
   }
 
   if (screen === 'report') {
-    return <ReportScreen onClose={() => setScreen('home')} />;
+    return <ReportScreen onClose={goHome} />;
   }
 
   return (

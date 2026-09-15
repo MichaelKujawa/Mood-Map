@@ -3,7 +3,6 @@ import {
   View, Text, StyleSheet, ScrollView, SafeAreaView,
   TouchableOpacity, Switch, Alert, Platform,
 } from 'react-native';
-import { colors, spacing, fontSize, radius } from '../../theme';
 import { store } from '../../data/store';
 import type { UserPreferences } from '../../data/storageTypes';
 import {
@@ -21,18 +20,18 @@ const APP_VERSION = '0.1.0';
 // ── Section header ────────────────────────────────────────────────────────────
 
 function SectionHeader({ title }: { title: string }) {
-  const { colors } = useTheme();
+  const { colors, spacing, fontSize, radius } = useTheme();
 
   const sectionStyles = useMemo(
-    () => createSectionStyles(colors),
-    [colors]
+    () => createSectionStyles(colors, spacing, fontSize, radius),
+    [colors, spacing, fontSize, radius]
   );
   return (
     <Text style={sectionStyles.header}>{title}</Text>
   );
 }
 
-const createSectionStyles = (colors: any) => 
+const createSectionStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   header: {
     color:         colors.purpleLight,
@@ -56,11 +55,11 @@ interface RowProps {
 }
 
 function SettingsRow({ label, sublabel, onPress, right, destructive }: RowProps) {
-    const { colors } = useTheme();
+    const { colors, spacing, fontSize, radius } = useTheme();
 
   const rowStyles = useMemo(
-    () => createRowStyles(colors),
-    [colors]
+    () => createRowStyles(colors, spacing, fontSize, radius),
+    [colors, spacing, fontSize, radius]
   );
 
   return (
@@ -86,7 +85,7 @@ function SettingsRow({ label, sublabel, onPress, right, destructive }: RowProps)
   );
 }
 
-const createRowStyles = (colors: any) => 
+const createRowStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   container: {
     flexDirection:     'row',
@@ -128,11 +127,11 @@ const createRowStyles = (colors: any) =>
 // ── Settings group (card wrapper) ─────────────────────────────────────────────
 
 function SettingsGroup({ children }: { children: React.ReactNode }) {
-    const { colors } = useTheme();
+    const { colors, spacing, fontSize, radius } = useTheme();
 
   const groupStyles = useMemo(
-    () => createGroupStyles(colors),
-    [colors]
+    () => createGroupStyles(colors, spacing, fontSize, radius),
+    [colors, spacing, fontSize, radius]
   );
   return (
     <View style={groupStyles.container}>
@@ -141,7 +140,7 @@ function SettingsGroup({ children }: { children: React.ReactNode }) {
   );
 }
 
-const createGroupStyles = (colors: any) => 
+const createGroupStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   container: {
     backgroundColor: colors.card,
@@ -193,11 +192,11 @@ function TimePickerModal({
     return `${h}:${m} ${ampm}`;
   }
 
-    const { colors } = useTheme();
+    const { colors, spacing, fontSize, radius } = useTheme();
 
   const timeStyles = useMemo(
-    () => createTimeStyles(colors),
-    [colors]
+    () => createTimeStyles(colors, spacing, fontSize, radius),
+    [colors, spacing, fontSize, radius]
   );
 
   return (
@@ -290,7 +289,7 @@ function TimePickerModal({
   );
 }
 
-const createTimeStyles = (colors: any) => 
+const createTimeStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   overlay: {
     position:        'absolute',
@@ -407,16 +406,15 @@ interface Props {
 }
 
 export default function SettingsScreen({ onClose, onViewTutorial, onGenerateReport, onChildrenModeChange}: Props) {
-      const { colors } = useTheme();
+      const { colors, spacing, fontSize, radius, mode: themeMode, setMode: setThemeMode } = useTheme();
 
     const styles = useMemo(
-        () => createStyles(colors),
-        [colors]
+        () => createStyles(colors, spacing, fontSize, radius),
+        [colors, spacing, fontSize, radius]
     );
   const [prefs, setPrefs]               = useState<UserPreferences | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [childrenMode, setChildrenMode] = useState(false);
-  const { mode: themeMode, setMode: setThemeMode } = useTheme();
 
   useEffect(() => {
     store.getPreferences().then(p => {
@@ -659,7 +657,7 @@ export default function SettingsScreen({ onClose, onViewTutorial, onGenerateRepo
   );
 }
 
-const createStyles = (colors: any) => 
+const createStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   container: {
     flex:            1,

@@ -6,11 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#1A1A2E"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tofujimo.MoodMapApp"
@@ -36,6 +31,16 @@
           "icon": "./assets/icon.png",
           "color": "#6B4FA0",
           "sounds": []
+        }
+      ],
+      "expo-sharing",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "backgroundColor": "#1A1A2E",
+          "imageWidth": 200
         }
       ]
     ],

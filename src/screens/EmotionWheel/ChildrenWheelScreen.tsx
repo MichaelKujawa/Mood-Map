@@ -1,10 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  ScrollView, SafeAreaView, Modal,
+  ScrollView, SafeAreaView, Modal, BackHandler, Platform,
 } from 'react-native';
-import { spacing, fontSize, radius } from '../../theme';
-import { useTheme } from '../../theme/ThemeContext'; 
+import { useTheme } from '../../theme/ThemeContext';
 import {
   CHILDREN_EMOTIONS,
   CHILDREN_INTENSITY_LEVELS,
@@ -31,12 +30,11 @@ function EmotionInfoModal({
   emotion: ChildEmotion;
   onClose: () => void;
 }) {
-  const { colors } = useTheme();
-
+  const { colors, spacing, fontSize, radius } = useTheme();
   const infoStyles = useMemo(
-    () => createInfoStyles(colors),
-    [colors]
-  );
+      () => createInfoStyles(colors, spacing, fontSize, radius),
+      [colors, spacing, fontSize, radius]
+    );
   return (
     <Modal visible animationType="fade" transparent onRequestClose={onClose}>
       <TouchableOpacity
@@ -60,7 +58,7 @@ function EmotionInfoModal({
   );
 }
 
-const createInfoStyles = (colors: any) => 
+const createInfoStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   overlay: {
     flex:            1,
@@ -127,13 +125,11 @@ function IntensitySelector({
   onSelect: (level: IntensityLevel) => void;
 }) {
   const [selected, setSelected] = useState<IntensityLevel | null>(null);
-  const { colors } = useTheme();
-
+  const { colors, spacing, fontSize, radius } = useTheme();
   const intensityStyles = useMemo(
-    () => createIntensityStyles(colors),
-    [colors]
-  );
-
+      () => createIntensityStyles(colors, spacing, fontSize, radius),
+      [colors, spacing, fontSize, radius]
+    );
   return (
     <View style={intensityStyles.container}>
       <Text style={intensityStyles.question}>
@@ -176,7 +172,7 @@ function IntensitySelector({
   );
 }
 
-const createIntensityStyles = (colors: any) => 
+const createIntensityStyles = (colors: any, spacing: any, fontSize: any, radius: any) =>
   StyleSheet.create({
   container: {
     gap: spacing.lg,
@@ -235,6 +231,11 @@ function JournalPrompt({
   emotion:  ChildEmotion;
   onSubmit: (note: string) => void;
 }) {
+  const { colors, spacing, fontSize, radius } = useTheme();
+  const journalStyles = useMemo(
+      () => createJournalStyles(colors, spacing, fontSize, radius),
+      [colors, spacing, fontSize, radius]
+    );
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
 
@@ -248,12 +249,6 @@ function JournalPrompt({
     }
     onSubmit(note.trim());
   }
-  const { colors } = useTheme();
-
-  const journalStyles = useMemo(
-    () => createJournalStyles(colors),
-    [colors]
-  );
 
   return (
     <View style={journalStyles.container}>
@@ -288,7 +283,7 @@ function JournalPrompt({
   );
 }
 
-const createJournalStyles = (colors: any) => 
+const createJournalStyles = (colors: any, spacing: any, fontSize: any, radius: any) =>
   StyleSheet.create({
   container: {
     gap: spacing.md,
@@ -351,12 +346,6 @@ type Step = 'select' | 'intensity' | 'journal';
 export default function ChildrenWheelScreen({
   onEmotionCompleted, onDone, onClose, completedCount,
 }: Props) {
-   const { colors } = useTheme();
-
-    const styles = useMemo(
-        () => createStyles(colors),
-        [colors]
-    );
   const [step, setStep]                   = useState<Step>('select');
   const [selectedEmotion, setSelectedEmotion] = useState<ChildEmotion | null>(null);
   const [selectedLevel, setSelectedLevel] = useState<IntensityLevel | null>(null);
@@ -393,6 +382,32 @@ export default function ChildrenWheelScreen({
     if (step === 'intensity')  { setStep('select');    return; }
     onClose();
   }
+
+  // ── Hardware back button (Android) ──────────────────────────────────────
+  // While this screen is mounted, back should step through select →
+  // intensity → journal (and close the info modal first if it's open)
+  // rather than immediately bubbling up to App.tsx's handler.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (infoEmotion !== null) {
+        setInfoEmotion(null);
+        return true;
+      }
+      handleBack();
+      return true;
+    });
+
+    return () => sub.remove();
+  }, [step, infoEmotion]);
+
+  const { colors, spacing, fontSize, radius } = useTheme();
+  
+      const styles = useMemo(
+          () => createStyles(colors, spacing, fontSize, radius),
+          [colors, spacing, fontSize, radius]
+      );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -507,7 +522,7 @@ export default function ChildrenWheelScreen({
   );
 }
 
-const createStyles = (colors: any) => 
+const createStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   container: {
     flex:            1,

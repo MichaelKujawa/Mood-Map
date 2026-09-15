@@ -3,10 +3,10 @@ import {
   View, Text, StyleSheet, ScrollView, SafeAreaView,
   TouchableOpacity, ActivityIndicator,
 } from 'react-native';
-import { spacing, fontSize, radius, ThemeMode, Theme } from '../../theme';
+import { ThemeMode, Theme } from '../../theme';
 import { useTheme } from '../../theme/ThemeContext'; 
 import { store } from '../../data/store';
-import type { PersistedEntry, MonthlyStats } from '../../data/storageTypes';
+import type { DailyAggregate, MonthlyStats } from '../../data/storageTypes';
 import DailyHistoryView from './DailyHistoryView';
 import Svg, { Line, Circle, Polyline } from 'react-native-svg';
 
@@ -85,16 +85,16 @@ function SparkLine({ scores }: { scores: Array<{ date: string; score: number }> 
 
 interface MonthRowProps {
   stats:          MonthlyStats;
-  entries:        PersistedEntry[];
-  onSelectEntry:  (entry: PersistedEntry) => void;
+  entries:        DailyAggregate[];
+  onSelectEntry:  (entry: DailyAggregate) => void;
 }
 
 function MonthRow({ stats, entries, onSelectEntry }: MonthRowProps) {
-  const { colors } = useTheme();
+  const { colors, spacing, fontSize, radius } = useTheme();
 
   const monthStyles = useMemo(
-    () => createMonthStyles(colors),
-    [colors]
+    () => createMonthStyles(colors, spacing, fontSize, radius),
+    [colors, spacing, fontSize, radius]
   );
   const [expanded, setExpanded] = useState(false);
 
@@ -172,7 +172,7 @@ function MonthRow({ stats, entries, onSelectEntry }: MonthRowProps) {
             const entryColor = scoreColor(entry.dailyScore, colors);
             return (
               <TouchableOpacity
-                key={entry.id}
+                key={entry.date}
                 style={monthStyles.entryRow}
                 onPress={() => onSelectEntry(entry)}
                 activeOpacity={0.7}
@@ -184,6 +184,7 @@ function MonthRow({ stats, entries, onSelectEntry }: MonthRowProps) {
                       month:   'short',
                       day:     'numeric',
                     })}
+                    {entry.sessionCount > 1 ? `  ·  ${entry.sessionCount} entries` : ''}
                   </Text>
                   <Text style={monthStyles.entryEmotions}>
                     {entry.emotions.map(e => e.derivative).join(' · ')}
@@ -204,7 +205,7 @@ function MonthRow({ stats, entries, onSelectEntry }: MonthRowProps) {
   );
 }
 
-const createMonthStyles = (colors: any) => 
+const createMonthStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   container: {
     backgroundColor: colors.card,
@@ -336,12 +337,12 @@ const createMonthStyles = (colors: any) =>
 
 // ── Important Data Points ─────────────────────────────────────────────────────
 
-function ImportantDataPoints({ entries }: { entries: PersistedEntry[] }) {
-  const { colors } = useTheme();
+function ImportantDataPoints({ entries }: { entries: DailyAggregate[] }) {
+  const { colors, spacing, fontSize, radius } = useTheme();
 
   const dpStyles = useMemo(
-    () => createDpStyles(colors),
-    [colors]
+    () => createDpStyles(colors, spacing, fontSize, radius),
+    [colors, spacing, fontSize, radius]
   );
   if (entries.length === 0) return null;
 
@@ -384,7 +385,7 @@ function ImportantDataPoints({ entries }: { entries: PersistedEntry[] }) {
   );
 }
 
-const createDpStyles = (colors: any) => 
+const createDpStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   container: {
     backgroundColor: colors.card,
@@ -422,16 +423,16 @@ const createDpStyles = (colors: any) =>
 // ── Main History Screen ───────────────────────────────────────────────────────
 
 export default function HistoryScreen({ onClose }: Props) {
-      const { colors } = useTheme();
+      const { colors, spacing, fontSize, radius } = useTheme();
 
     const styles = useMemo(
-        () => createStyles(colors),
-        [colors]
+        () => createStyles(colors, spacing, fontSize, radius),
+        [colors, spacing, fontSize, radius]
     );
   const [loading, setLoading]             = useState(true);
-  const [allEntries, setAllEntries]       = useState<PersistedEntry[]>([]);
+  const [allEntries, setAllEntries]       = useState<DailyAggregate[]>([]);
   const [monthStats, setMonthStats]       = useState<MonthlyStats[]>([]);
-  const [selectedEntry, setSelectedEntry] = useState<PersistedEntry | null>(null);
+  const [selectedEntry, setSelectedEntry] = useState<DailyAggregate | null>(null);
   const [showCount, setShowCount]         = useState(6);
 
   const loadData = useCallback(async () => {
@@ -536,7 +537,7 @@ export default function HistoryScreen({ onClose }: Props) {
   );
 }
 
-const createStyles = (colors: any) => 
+const createStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   container: {
     flex:            1,

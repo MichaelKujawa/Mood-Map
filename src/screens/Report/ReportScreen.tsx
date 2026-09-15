@@ -3,11 +3,10 @@ import {
   View, Text, StyleSheet, ScrollView, SafeAreaView,
   TouchableOpacity, Switch, ActivityIndicator, Alert,
 } from 'react-native';
-import { spacing, fontSize, radius } from '../../theme';
 import { useTheme } from '../../theme/ThemeContext'; 
 import { store } from '../../data/store';
 import { generateAndShareReport } from '../../core/pdfExport';
-import type { PersistedEntry, MonthlyStats } from '../../data/storageTypes';
+import type { MonthlyStats } from '../../data/storageTypes';
 
 interface Props {
   onClose: () => void;
@@ -38,11 +37,11 @@ function getDateRange(option: DateRangeOption): { from: string; to: string } {
 }
 
 export default function ReportScreen({ onClose }: Props) {
-      const { colors } = useTheme();
+      const { colors, spacing, fontSize, radius } = useTheme();
 
     const styles = useMemo(
-        () => createStyles(colors),
-        [colors]
+        () => createStyles(colors, spacing, fontSize, radius),
+        [colors, spacing, fontSize, radius]
     );
   const [dateRange, setDateRange]       = useState<DateRangeOption>('30days');
   const [includeNotes, setIncludeNotes] = useState(false);
@@ -220,7 +219,7 @@ export default function ReportScreen({ onClose }: Props) {
   );
 }
 
-const createStyles = (colors: any) => 
+const createStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   container: {
     flex:            1,

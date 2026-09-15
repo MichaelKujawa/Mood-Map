@@ -4,7 +4,6 @@ import {
   TextInput, ScrollView, SafeAreaView,
   KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
-import { spacing, fontSize, radius } from '../../theme';
 import { useTheme } from '../../theme/ThemeContext';
 import type { CoreEmotion, EmotionTier } from '../../core/types';
 import { EMOTION_COLORS, DERIVATIVE_NAMES } from '../EmotionWheel/WheelItem';
@@ -42,11 +41,11 @@ function IntensitySlider({
   onChange: (v: number) => void;
   color: string;
 }) {
-  const { colors } = useTheme();
+  const { colors, spacing, fontSize, radius } = useTheme();
 
   const sliderStyles = useMemo(
-    () => createSliderStyles(colors),
-    [colors]
+    () => createSliderStyles(colors, spacing, fontSize, radius),
+    [colors, spacing, fontSize, radius]
   );
   return (
     <View style={sliderStyles.container}>
@@ -84,7 +83,7 @@ function IntensitySlider({
   );
 }
 
-const createSliderStyles = (colors: any) => StyleSheet.create({
+const createSliderStyles = (colors: any, spacing: any, fontSize: any, radius: any) => StyleSheet.create({
   container: { gap: spacing.sm },
   track: {
     height:          6,
@@ -144,11 +143,11 @@ export default function EmotionDetailScreen({
   entryNumber, totalSoFar,
   onConfirm, onBack, onDone,
 }: Props) {
-      const { colors } = useTheme();
+      const { colors, spacing, fontSize, radius } = useTheme();
 
     const styles = useMemo(
-        () => createStyles(colors),
-        [colors]
+        () => createStyles(colors, spacing, fontSize, radius),
+        [colors, spacing, fontSize, radius]
     );
 
   const [intensity,   setIntensity]   = useState(5);
@@ -313,7 +312,7 @@ export default function EmotionDetailScreen({
   );
 }
 
-const createStyles = (colors: any) => 
+const createStyles = (colors: any, spacing: any, fontSize: any, radius: any) => 
   StyleSheet.create({
   container: {
     flex:            1,
